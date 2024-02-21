@@ -1,0 +1,87 @@
+---
+title: "STAT 600 - HW 3"
+author: "Kevin Korsurat"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(knitr)
+library(Rcpp)
+library(RcppArmadillo)
+library(ggplot2)
+library(latex2exp)
+library(foreach)
+library(doParallel)
+
+path <- "/Users/kevin-imac/Desktop/Github - Repo/"
+if(! file.exists(path)){
+  path <- "/Users/kevinkvp/Desktop/Github Repo/"
+}
+
+# sourceCpp(paste0(path, "HW3EM/src/main.cpp"))
+```
+
+All Rcpp/RcppArmadillo can be found in my [\textcolor{red}{GitHub}](https://github.com/skorsu/HW3EM).
+
+```{r}
+
+### User-defined functions -----------------------------------------------------
+meanSD <- function(x, dplace = 5){
+  mm <- round(mean(x), digits = dplace)
+  ss <- round(sd(x), digits = dplace)
+  paste0(mm, " (SD = ", ss, ")")
+}
+```
+
+## Derivation
+
+First, I will derive the log-likelihood function given the completed data, $l\left(p, \lambda, \mu | \boldsymbol{Y}, \boldsymbol{\delta} \right)$.
+
+$$\begin{aligned}
+l\left(p, \lambda, \mu | \boldsymbol{Y}, \boldsymbol{\delta} \right) &= \log\left(L\left(p, \lambda, \mu | \boldsymbol{Y}, \boldsymbol{\delta} \right)\right) \\
+&= \log\left(\prod_{i=1}^{n} p\left(Y_{i}, \delta_{i}| p, \lambda, \mu\right)\right) \\
+&= \log\left(\prod_{i=1}^{n} \left(p\lambda\exp\left(-\lambda y_{i}\right)\right)^{\delta_{i}} \left(\left(1-p\right)\mu\exp\left(-\mu y_{i}\right)\right)^{1-\delta_{i}} \right) \\
+&= \sum_{i=1}^{n}\log\left\{\left(p\lambda\exp\left(-\lambda y_{i}\right)\right)^{\delta_{i}} \left(\left(1-p\right)\mu\exp\left(-\mu y_{i}\right)\right)^{1-\delta_{i}}\right\} \\
+&= \sum_{i=1}^{n}\left[\delta_{i}\left\{-\lambda y_{i} + \log\left(p \lambda\right)\right\} + \left(1 - \delta_{i}\right)\left\{-\mu y_{i} + \log\left(\left(1 - p\right)\mu\right)\right\}\right]
+\end{aligned}$$
+
+Then, the E-step in the EM algorithm is shown below.
+
+$$\begin{aligned}
+Q\left(p, \lambda, \mu | p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right) &= E\left[l\left(p, \lambda, \mu | \boldsymbol{Y}, \boldsymbol{\delta} \right) | \boldsymbol{Y}, p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right] \\
+&= E\left[\sum_{i=1}^{n}\left[\delta_{i}\left\{-\lambda y_{i} + \log\left(p \lambda\right)\right\} + \left(1 - \delta_{i}\right)\left\{-\mu y_{i} + \log\left(\left(1 - p\right)\mu\right)\right\}\right] \Bigg | \boldsymbol{Y}, p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right] \\
+&= \sum_{i=1}^{n} E\left[\delta_{i}\left\{-\lambda y_{i} + \log\left(p \lambda\right)\right\} + \left(1 - \delta_{i}\right)\left\{-\mu y_{i} + \log\left(\left(1 - p\right)\mu\right)\right\} \Bigg | y_{i}, p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right] \\
+&= \sum_{i=1}^{n} \left\{\hat\delta^{(t)}_{i}\left[-\lambda y_{i} + \log\left(p \lambda\right)\right]  + \left(1 - \hat\delta^{(t)}_{i}\right)\left[-\mu y_{i} + \log\left(\left(1 - p\right)\mu\right)\right]\right\}
+\end{aligned}$$
+
+where $\hat\delta^{(t)}_{i} = E\left[\delta_{i}\right| y_{i}, p^{(t)}, \lambda^{(t)}, \mu^{(t)}] = \frac{p^{(t)}\lambda^{(t)} \exp{(-\lambda^{(t)} y_{i})}}{p^{(t)}\lambda^{(t)} \exp{(-\lambda^{(t)} y_{i})}+(1-p^{(t)})\mu^{(t)}\exp{(-\mu^{(t)} y_{i})}}$
+
+Then, I will derive the M-step by starting the finding the $p^{(t+1)}$.
+
+$$\begin{aligned}
+\frac{d}{dp}Q\left(p, \lambda, \mu | p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right) &\stackrel{\mbox{set}}{=} 0 \\
+\sum_{i=1}^{n}\left[\frac{\hat\delta_{i}^{(t)}}{p} - \frac{1 - \hat\delta_{i}^{(t)}}{1 - p}\right] &= 0 \\
+\sum_{i=1}^{n}\left[(1-p)\hat\delta_{i}^{(t)} - \left(1 - \hat\delta_{i}^{(t)}\right)p\right] &= 0 \\
+\sum_{i=1}^{n}\hat\delta_{i}^{(t)} -np &= 0 \\
+p^{(t+1)} &= \frac{1}{n}\sum_{i=1}^{n}\hat\delta_{i}^{(t)}
+\end{aligned}$$
+
+Below is the derivation for $\lambda^{(t+1)}$.
+
+$$\begin{aligned}
+\frac{d}{d\lambda}Q\left(p, \lambda, \mu | p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right) &\stackrel{\mbox{set}}{=} 0 \\
+\sum_{i=1}^{n}\left[-\hat\delta_{i}^{(t)}y_{i} + \frac{\hat\delta_{i}^{(t)}}{\lambda}\right] &= 0 \\
+-\lambda \sum_{i=1}^{n} \hat\delta_{i}^{(t)} y_{i} + \sum_{i=1}^{n}\hat\delta_{i}^{(t)} &= 0 \\
+\lambda^{(t+1)} &= \frac{\sum_{i=1}^{n}\hat\delta_{i}^{(t)}}{\sum_{i=1}^{n}\hat\delta_{i}^{(t)}y_{i}}
+\end{aligned}$$
+
+\newpage
+
+## Appendix
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE} 
+
+```
