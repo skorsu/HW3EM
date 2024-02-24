@@ -16,7 +16,6 @@ library(doParallel)
 library(ggplot2)
 library(latex2exp)
 
-
 path <- "/Users/kevin-imac/Desktop/Github - Repo/"
 if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/"
@@ -89,6 +88,13 @@ $$\begin{aligned}
 \end{aligned}$$
 
 \newpage
+
+```{r}
+
+### Simulate the data
+
+```
+
 
 ## Appendix
 
