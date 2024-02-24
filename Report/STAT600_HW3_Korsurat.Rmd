@@ -11,10 +11,11 @@ library(tidyverse)
 library(knitr)
 library(Rcpp)
 library(RcppArmadillo)
-library(ggplot2)
-library(latex2exp)
 library(foreach)
 library(doParallel)
+library(ggplot2)
+library(latex2exp)
+
 
 path <- "/Users/kevin-imac/Desktop/Github - Repo/"
 if(! file.exists(path)){
@@ -76,6 +77,15 @@ $$\begin{aligned}
 \sum_{i=1}^{n}\left[-\hat\delta_{i}^{(t)}y_{i} + \frac{\hat\delta_{i}^{(t)}}{\lambda}\right] &= 0 \\
 -\lambda \sum_{i=1}^{n} \hat\delta_{i}^{(t)} y_{i} + \sum_{i=1}^{n}\hat\delta_{i}^{(t)} &= 0 \\
 \lambda^{(t+1)} &= \frac{\sum_{i=1}^{n}\hat\delta_{i}^{(t)}}{\sum_{i=1}^{n}\hat\delta_{i}^{(t)}y_{i}}
+\end{aligned}$$
+
+Lastly, this is the derivation for $\mu^{(t+1)}$
+
+$$\begin{aligned}
+\frac{d}{d\mu}Q\left(p, \lambda, \mu | p^{(t)}, \lambda^{(t)}, \mu^{(t)} \right) &\stackrel{\mbox{set}}{=} 0 \\
+\sum_{i=1}^{n}\left[\left(1-\hat\delta_{i}^{(t)}\right)y_{i} + \frac{1-\hat\delta_{i}^{(t)}}{\mu}\right] &= 0 \\
+-\mu \sum_{i=1}^{n} \left(1 - \hat\delta_{i}^{(t)}\right) y_{i} + \sum_{i=1}^{n}\left(1-\hat\delta_{i}^{(t)}\right) &= 0 \\
+\mu^{(t+1)} &= \frac{\sum_{i=1}^{n}\left(1-\hat\delta_{i}^{(t)}\right)}{\sum_{i=1}^{n}\left(1-\hat\delta_{i}^{(t)}\right)y_{i}}
 \end{aligned}$$
 
 \newpage
