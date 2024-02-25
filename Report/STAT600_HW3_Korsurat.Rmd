@@ -15,13 +15,14 @@ library(foreach)
 library(doParallel)
 library(ggplot2)
 library(latex2exp)
+library(gridExtra)
 
 path <- "/Users/kevin-imac/Desktop/Github - Repo/"
 if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/"
 }
 
-# sourceCpp(paste0(path, "HW3EM/src/main.cpp"))
+sourceCpp(paste0(path, "HW3EM/src/main.cpp"))
 ```
 
 All Rcpp/RcppArmadillo can be found in my [\textcolor{red}{GitHub}](https://github.com/skorsu/HW3EM).
@@ -87,14 +88,128 @@ $$\begin{aligned}
 \mu^{(t+1)} &= \frac{\sum_{i=1}^{n}\left(1-\hat\delta_{i}^{(t)}\right)}{\sum_{i=1}^{n}\left(1-\hat\delta_{i}^{(t)}\right)y_{i}}
 \end{aligned}$$
 
-\newpage
+## Note: Louis's Method
+
+According to equations (4.29) and (4.32), we can conclude that the Hessian matrix for $\hat{\boldsymbol\theta} = \left(\hat{p}, \hat{\lambda}, \lambda{\mu}\right)$ can be calculated by $Q''\left(\boldsymbol\theta\Big|\boldsymbol{\omega}\right)\bigg|_{\boldsymbol{\omega} = \boldsymbol\theta} - l\left(\boldsymbol\theta\Big|\boldsymbol{y}\right)$. The variance can be calculated by taking the diagonal of the inverse of this calculated matrix. Since we are interested only in the variance of the parameters, we can consider only the diagonal elements. The derivative can be seen in the Rcpp code (I use an R function to calculate the derivative).
+
+## Result
+
+We begin by running the EM algorithm. I have set the starting values as $\boldsymbol{\theta}{0} = \left(p = 0.25, \lambda = 0.5, \mu = 2.5\right)$. The stopping criterion for the EM algorithm is $||\boldsymbol{\theta}^{(t+1)} - \boldsymbol{\theta}^{(t)}||{2} < 1 \times 10^{-5}$, where $||\cdot||_{2}$ denotes the Euclidean distance.
 
 ```{r}
 
-### Simulate the data
+### Simulated the data
+set.seed(31082, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+simDat <- foreach(t = 1:100) %dopar% {
+  
+  ### Simulate the data
+  clus_ind <- rbinom(100, 1, 0.25)
+  y <- rexp(100, rate = ifelse(clus_ind == 1, 1, 2))
+  
+  y
+  
+}
+stopImplicitCluster()
 
+### Run the model
+set.seed(31082, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+resultEM <- foreach(t = 1:100, .combine = "rbind") %dopar% {
+  
+  em_result <- EM_rcpp(y = simDat[[t]], p0 = 0.2, lambda0 = 0.5, mu0 = 2.5, eps = 1e-5)
+  c(em_result$p, em_result$lambda, em_result$mu)
+  
+}
+stopImplicitCluster()
+
+### Louis SE
+set.seed(31082, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+VARLouis <- foreach(t = 1:100, .combine = "rbind") %dopar% {
+  
+  varMat <- iY(y = simDat[[t]], p = resultEM[t, 1], lb = resultEM[t, 2], mu = resultEM[t, 3]) - 
+    iX(y = simDat[[t]], p = resultEM[t, 1], lb = resultEM[t, 2], mu = resultEM[t, 3])
+  1/(diag(varMat))
+  
+}
+stopImplicitCluster()
+
+#### Bootstrap
+set.seed(31082, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+VARBoots <- foreach(t = 1:100, .combine = "rbind") %dopar% {
+  
+  bootMat <- BootResult(y = simDat[[t]], p0 = 0.2, lambda0 = 0.5, mu0 = 2.5, 
+                        eps = 1e-5, EMinit = resultEM[t, ], M = 1000)
+  apply(bootMat, 2, var)
+  
+}
+stopImplicitCluster()
 ```
 
+Table 1 shows the estimates and the bias for each estimate. We might notice that 'p' and '$\lambda$' tend to be underestimated when the model is overestimating '$\mu$'. I believe this is reasonable as the starting point for 'p' and '$\lambda$' is lower than the actual value, while the starting point for '$\mu$' is greater than the correct value. We might also notice that the model tries to reach the actual values, but it still cannot perform well. Another finding that I did not show in this report is that this model is sensitive to the starting point. Additionally, Figure 1 also visualizes the distribution from the EM algorithm for each parameter. We notice that the results are pretty close to the actual values.
+
+```{r}
+
+### Table Summary: Estimate and Bias
+data.frame(est = apply(resultEM, 2, meanSD), 
+           bias = apply(resultEM - matrix(c(0.25, 1, 2), ncol = 3, nrow = 100, byrow = TRUE), 2, meanSD)) %>%
+  t() %>%
+  `rownames<-`(c("Estimate", "Bias")) %>%
+  kable(col.names = c("p", "$\\lambda$", "$\\mu$"),
+        caption = "The average esitmate and bias for each parameter")
+```
+
+```{r, fig.cap = "The distribution of the result from EM for each parameter."}
+
+### Distribution of the result
+plot0 <- ggplot(data.frame(x = resultEM[, 1]), aes(x = x)) +
+  geom_histogram(fill = "salmon", alpha = 0.75, binwidth = 0.005) +
+  theme_bw() +
+  geom_vline(xintercept = 0.25, color = "red") +
+  labs(x = "p", y = "Count", title = "Estimate: p")
+
+plot1 <- ggplot(data.frame(x = resultEM[, 2]), aes(x = x)) +
+  geom_histogram(fill = "aquamarine2", alpha = 0.75, binwidth = 0.025) +
+  theme_bw() +
+  geom_vline(xintercept = 1, color = "red") +
+  labs(x = TeX("$\\lambda$"), y = "Count", title = TeX("Estimate: $\\lambda$"))
+
+plot2 <- ggplot(data.frame(x = resultEM[, 3]), aes(x = x)) +
+  geom_histogram(fill = "purple2", alpha = 0.75, binwidth = 0.025) +
+  theme_bw() +
+  geom_vline(xintercept = 2, color = "red") +
+  labs(x = TeX("$\\mu$"), y = "Count", title = TeX("Estimate: $\\mu$"))
+
+grid.arrange(plot0, plot1, plot2)
+```
+
+Tables 2 and 3 show the standard error calculations based on Louis's method and the bootstrap, respectively. Note that for the bootstrap method, I have set M (the number of resample sampling) = 1000. We notice that Louis's method provided the higher standard error compared to the bootstrap. This leads to the conclusion that the coverage probability provided by Louis's method is higher than the one with the bootstrap. Note that the 95% confidence interval is calculated as $\hat{\theta_{j}} \pm z_{0.05/2}\text{SE}\left(\hat{\theta_{j}}\right)$.
+
+```{r}
+data.frame(sqrt(colMeans(VARLouis)), 
+           ((resultEM - (qnorm(1 - (0.05/2)) * sqrt(VARLouis)) <= matrix(c(0.25, 1, 2), ncol = 3, nrow = 100, byrow = TRUE)) &
+              (matrix(c(0.25, 1, 2), ncol = 3, nrow = 100, byrow = TRUE) <= resultEM + (qnorm(1 - (0.05/2)) * sqrt(VARLouis)))) %>%
+             colSums()) %>%
+  t() %>% 
+  `rownames<-`(c("Standard Error", "Coverage Probability")) %>%
+  kable(col.names = c("p", "$\\lambda$", "$\\mu$"), 
+        caption = "The standard error for each parameter by using Louis's Method")
+```
+
+```{r}
+data.frame(sqrt(colMeans(VARBoots)), 
+           ((resultEM - (qnorm(1 - (0.05/2)) * sqrt(VARBoots)) <= matrix(c(0.25, 1, 2), ncol = 3, nrow = 100, byrow = TRUE)) &
+              (matrix(c(0.25, 1, 2), ncol = 3, nrow = 100, byrow = TRUE) <= resultEM + (qnorm(1 - (0.05/2)) * sqrt(VARBoots)))) %>%
+             colSums()) %>%
+  t() %>% 
+  `rownames<-`(c("Standard Error", "Coverage Probability")) %>%
+  kable(col.names = c("p", "$\\lambda$", "$\\mu$"),
+        caption = "The standard error for each parameter by using the bootstrap Method")
+```
+
+\newpage
 
 ## Appendix
 
