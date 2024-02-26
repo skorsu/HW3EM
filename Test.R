@@ -44,6 +44,8 @@ resultEM <- foreach(t = 1:100, .combine = "rbind") %dopar% {
 }
 stopImplicitCluster()
 
+resultEM
+
 ### Louis SE
 set.seed(31082, kind = "L'Ecuyer-CMRG")
 registerDoParallel(5)
@@ -56,7 +58,33 @@ VARLouis <- foreach(t = 1:100, .combine = "rbind") %dopar% {
 }
 stopImplicitCluster()
 
+sqrt(apply(VARLouis, 2, mean))
+
 #### Bootstrap
+set.seed(31082, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+bTest <- foreach(t = 1:100) %:%
+  foreach(m = 1:100) %dopar% {
+  randB <- sample(1:100, size = 100, replace = TRUE)
+  EMBoot <- EM_rcpp(y = simDat[[t]][randB], p0 = 0.25, lambda0 = 1, mu0 = 2, eps = 1e-5)
+  list(randB, c(EMBoot$p, EMBoot$lambda, EMBoot$mu))
+}
+stopImplicitCluster()
+
+sapply(1:100,
+       function(y){apply(t(sapply(1:100, function(x){bTest[[y]][[x]][[2]]})), 2, var)}) %>%
+  t() %>%
+  apply(2, meanSD)
+
+sapply(1:100,
+       function(y){apply(t(sapply(1:100, function(x){bTest[[y]][[x]][[2]]})), 2, var)}) %>%
+  t() %>%
+  .[, 3] %>%
+  boxplot()
+
+var(bTest[, 3])
+
+
 set.seed(31082, kind = "L'Ecuyer-CMRG")
 registerDoParallel(5)
 VARBoots <- foreach(t = 1:100, .combine = "rbind") %dopar% {

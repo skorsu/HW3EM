@@ -80,20 +80,23 @@ Rcpp::List EM_rcpp(arma::vec y, double p0, double lambda0, double mu0,
   
   arma::vec dhat = dhat_calc(y, p, lambda, mu);
   
-  double p_new = arma::mean(dhat);
+  double p_new = arma::accu(dhat)/y.size();
   double lambda_new = arma::accu(dhat)/arma::accu(dhat % y);
   double mu_new = arma::accu(1 - dhat)/arma::accu((1 - dhat) % y);
   
   arma::vec theta_new = {p_new, lambda_new, mu_new};
   
   while(arma::norm(theta - theta_new, 2.0) >= eps){
+    
     iter += 1;
     p = p_new;
     lambda = lambda_new;
     mu = mu_new;
-    theta = {p, lambda, mu}; 
+    theta = {p, lambda, mu};
     
-    p_new = arma::mean(dhat);
+    dhat = dhat_calc(y, p, lambda, mu);
+    
+    p_new = arma::accu(dhat)/y.size();
     lambda_new = arma::accu(dhat)/arma::accu(dhat % y);
     mu_new = arma::accu(1 - dhat)/arma::accu((1 - dhat) % y);
     
@@ -110,7 +113,7 @@ Rcpp::List EM_rcpp(arma::vec y, double p0, double lambda0, double mu0,
   
 }
 
-// [[Rcpp::export]]
+// This is the Rcpp version of the Bootstrap method. However, I don't use it. 
 arma::mat BootResult(arma::vec y, double p0, double lambda0, double mu0, 
                      double eps, arma::vec EMinit, unsigned int M){
   
